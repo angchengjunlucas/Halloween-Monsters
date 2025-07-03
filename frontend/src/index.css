@@ -1,0 +1,21 @@
+/* frontend/src/index.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ensure html/body fill at least the viewport */
+html, body, #root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+/* Apply a fixed, full‐page background that stays visible on scroll */
+body {
+  background-image: url("/images/background.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}

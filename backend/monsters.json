@@ -1,0 +1,77 @@
+[
+  {
+    "name": "zombie",
+    "health": 8,
+    "loot": "Poison"
+  },
+  {
+    "name": "icequeen",
+    "health": 6,
+    "loot": "Ice"
+  },
+  {
+    "name": "warrior",
+    "health": 10,
+    "loot": "Dual Sword"
+  },
+  {
+    "name": "werewolf",
+    "health": 9,
+    "loot": "Grenade"
+  },
+  {
+    "name": "gargoyle",
+    "health": 7,
+    "loot": "Dynamite"
+  },
+  {
+    "name": "goblin",
+    "health": 5,
+    "loot": "Poison"
+  },
+  {
+    "name": "golem",
+    "health": 12,
+    "loot": "Ice"
+  },
+  {
+    "name": "mermaid",
+    "health": 7,
+    "loot": "Dual Sword"
+  },
+  {
+    "name": "mummy",
+    "health": 6,
+    "loot": "Grenade"
+  },
+  {
+    "name": "ogre",
+    "health": 11,
+    "loot": "Dynamite"
+  },
+  {
+    "name": "seaking",
+    "health": 9,
+    "loot": "Poison"
+  },
+  {
+    "name": "vampire",
+    "health": 8,
+    "loot": "Ice"
+  },
+  {
+    "name": "littledevil",
+    "health": 5,
+    "loot": "Dual Sword"
+  },
+  {
+    "name": "witch",
+    "health": 7,
+    "loot": "Grenade"
+  },
+  {
+    "name": "wizard",
+    "health": 10,
+    "loot": "Dynamite"
+  }
+]
