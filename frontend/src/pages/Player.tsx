@@ -2,33 +2,27 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getStatus, getPlayerWeapons, submitMove } from "../api/api";
+import {
+  getStatus,
+  getPlayerWeapons,
+  submitMove,
+} from "../api/api";
 import Battlefield from "../components/Battlefield";
-import type { BattlefieldMonster } from "../components/Battlefield";
-import type { LootType } from "../components/MonsterCard";
 
-interface RawBattlefieldMonster {
+interface BattlefieldMonster {
   position: number;
-  name: string;
+  name: string;         // slug
   health: number;
-  max_health?: number;
+  max_health: number;
   loot: string | null;
 }
 
 interface StatusShape {
-  battlefield: RawBattlefieldMonster[];
+  battlefield: BattlefieldMonster[];
   turn_order: string[];
   round_started: boolean;
   submitted_moves: string[];
 }
-
-const WEAPON_ICONS: Record<string,string> = {
-  Poison: "/icons/poison.svg",
-  Ice: "/icons/ice.svg",
-  "Dual Sword": "/icons/dual-sword.svg",
-  Grenade: "/icons/grenade.svg",
-  Dynamite: "/icons/dynamite.svg",
-};
 
 export default function Player() {
   const { playerName } = useParams<{ playerName: string }>();
@@ -36,48 +30,69 @@ export default function Player() {
   const [weapons, setWeapons] = useState<[string, number][]>([]);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isMyTurn, setIsMyTurn] = useState(false);
+
   const [selectedWeaponIdx, setSelectedWeaponIdx] = useState(0);
-  const [targetPos, setTargetPos] = useState(1);
+  const [targetPos, setTargetPos] = useState<number>(1);
 
   useEffect(() => {
-    const iv = setInterval(async () => {
+    const interval = setInterval(async () => {
       try {
-        const s = (await getStatus()) as StatusShape;
+        const s: StatusShape = await getStatus();
         setStatus(s);
-        setWeapons(await getPlayerWeapons(playerName!));
-        if (s.round_started) {
-          const done = s.submitted_moves.includes(playerName!);
-          setHasSubmitted(done);
-          const next = s.turn_order.find((n) => !s.submitted_moves.includes(n));
-          setIsMyTurn(next === playerName);
-          if (s.battlefield.length && !done) {
-            setTargetPos(s.battlefield[0].position);
-          }
+
+        try {
+          const w = await getPlayerWeapons(playerName!);
+          setWeapons(w);
+        } catch {
+          console.error("Failed to fetch weapons for", playerName);
         }
-      } catch {}
+
+        if (!s.round_started) {
+          setHasSubmitted(false);
+          setIsMyTurn(false);
+          return;
+        }
+
+        const submitted = s.submitted_moves.includes(playerName!);
+        setHasSubmitted(submitted);
+
+        const nextPlayer = s.turn_order.find(
+          (n) => !s.submitted_moves.includes(n)
+        );
+        setIsMyTurn(nextPlayer === playerName!);
+      } catch {
+        // ignore
+      }
     }, 500);
-    return () => clearInterval(iv);
+    return () => clearInterval(interval);
   }, [playerName]);
 
-  if (!status) return <p className="p-4">Waiting for game to start…</p>;
-  if (!status.round_started) return <p className="p-4">Waiting for round to start…</p>;
-  if (hasSubmitted) return <p className="p-4">You have submitted your move. Please wait…</p>;
+  if (!status) {
+    return <p className="p-4">Waiting for game to start…</p>;
+  }
 
-  const battlefieldData: BattlefieldMonster[] = status.battlefield.map((m) => ({
-    position: m.position,
-    name: m.name.trim().toLowerCase(),
-    health: m.health,
-    maxHealth: m.max_health ?? m.health,
-    loot: m.loot as LootType | null,
-  }));
+  const { battlefield, turn_order, round_started } = status;
+
+  if (!round_started) {
+    return (
+      <div className="p-4">
+        <h2 className="text-2xl mb-2">Hello {playerName},</h2>
+        <p>Waiting for round to start…</p>
+      </div>
+    );
+  }
+
+  if (hasSubmitted) {
+    return <p className="p-4">You have submitted your move. Please wait…</p>;
+  }
 
   if (!isMyTurn) {
     return (
       <div className="p-4">
         <h2 className="text-2xl mb-2">Hello {playerName},</h2>
         <p>Waiting for your turn…</p>
-        <p className="italic">Order: {status.turn_order.join(" → ")}</p>
-        <Battlefield monsters={battlefieldData} turnOrder={status.turn_order} />
+        <p className="italic">Current order: {turn_order.join(" → ")}</p>
+        <Battlefield monsters={battlefield} />
       </div>
     );
   }
@@ -85,36 +100,46 @@ export default function Player() {
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-2xl font-semibold">Your Turn, {playerName}</h2>
-
-      <Battlefield monsters={battlefieldData} turnOrder={status.turn_order} />
+      <Battlefield monsters={battlefield} />
 
       <div className="space-y-2">
         <p>Select a weapon and a monster to attack:</p>
 
-        {weapons.map(([wname, atk], idx) => (
-          <label key={idx} className="block">
-            <input
-              type="radio"
-              name="weapon"
-              value={idx}
-              checked={idx === selectedWeaponIdx}
-              onChange={() => setSelectedWeaponIdx(idx)}
-            />{" "}
-            <img src={WEAPON_ICONS[wname]} alt={wname} className="inline h-5 w-5 mr-1" />
-            {wname} (ATK={atk})
-          </label>
-        ))}
+        {weapons.length === 0 && <p>Loading your weapons…</p>}
+
+        {weapons.length === 1 ? (
+          <p>
+            Only weapon: <strong>{weapons[0][0]}</strong> (ATK={weapons[0][1]})
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {weapons.map(([wname, atk], idx) => (
+              <li key={idx}>
+                <label>
+                  <input
+                    type="radio"
+                    name="weaponRadio"
+                    value={idx}
+                    checked={idx === selectedWeaponIdx}
+                    onChange={() => setSelectedWeaponIdx(idx)}
+                  />{" "}
+                  {wname} (ATK={atk})
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div>
-          <label className="mr-2">Target:</label>
+          <label className="mr-2">Monster position:</label>
           <select
             className="border px-2 py-1"
             value={targetPos}
-            onChange={(e) => setTargetPos(+e.target.value)}
+            onChange={(e) => setTargetPos(Number(e.target.value))}
           >
-            {battlefieldData.map((m) => (
+            {battlefield.map((m) => (
               <option key={m.position} value={m.position}>
-                #{m.position}
+                {m.position}
               </option>
             ))}
           </select>
@@ -123,8 +148,8 @@ export default function Player() {
         <button
           className="mt-2 px-4 py-2 bg-green-600 text-white rounded"
           onClick={async () => {
-            const weaponName = weapons[selectedWeaponIdx][0];
-            await submitMove(playerName!, targetPos, weaponName);
+            const chosenWeaponName = weapons[selectedWeaponIdx][0];
+            await submitMove(playerName!, targetPos, chosenWeaponName);
             setHasSubmitted(true);
           }}
         >

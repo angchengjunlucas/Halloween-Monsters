@@ -1,4 +1,4 @@
-// src/components/MonsterRow.tsx
+// frontend/src/components/MonsterRow.tsx
 
 import React from "react";
 import MonsterCard from "./MonsterCard";
@@ -10,7 +10,7 @@ export interface MonsterData {
   health: number;
   maxHealth: number;
   loot: LootType | null;
-  imageUrl: string;
+  imageUrl?: string;
 }
 
 interface MonsterRowProps {

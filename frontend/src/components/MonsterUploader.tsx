@@ -91,6 +91,7 @@ export default function MonsterUploader() {
             health={health}
             maxHealth={maxHealth}
             loot={loot}
+            cardWidth={150}
           />
         ) : (
           <p className="italic text-gray-500">No image uploaded yet.</p>

@@ -1,5 +1,3 @@
-// frontend/src/components/Reserve.tsx
-
 import React, { useState } from "react";
 import MonsterCard from "./MonsterCard";
 import type { LootType } from "./MonsterCard";
@@ -35,7 +33,8 @@ export default function Reserve({ monsters }: ReserveProps) {
                   imageUrl={imageUrl}
                   health={m.health}
                   maxHealth={m.health}
-                  loot={(m.loot as unknown as LootType) || null}
+                  loot={(m.loot as LootType) || null}
+                  cardWidth={150}
                 />
               </div>
             );
