@@ -13,6 +13,7 @@ import {
 import Battlefield from "../components/Battlefield";
 import Reserve from "../components/Reserve";
 import VPRedistribute from "../components/VPRedistribute";
+import TurnOrder from "../components/TurnOrder";  // ← import TurnOrder
 
 interface AllianceInfo {
   name: string;
@@ -299,6 +300,7 @@ export default function GM() {
       return (
         <div className="p-4 text-white">
           <h2 className="text-xl font-bold mb-4">Round In Progress</h2>
+          <TurnOrder order={status.turn_order} /> {/* ← show turn order */}
           <Battlefield monsters={status.battlefield} />
           <Reserve monsters={free} />
           <p>Submitted: {status.submitted_moves.length}/{total}</p>
@@ -333,6 +335,7 @@ export default function GM() {
               <li key={i}>{k}</li>
             ))}
           </ul>
+          <TurnOrder order={status.turn_order} /> {/* ← optionally show order again */}
           <Battlefield monsters={status.battlefield} />
           <Reserve monsters={free} />
           <button
