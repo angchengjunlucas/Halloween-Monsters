@@ -13,7 +13,6 @@ import {
 import Battlefield from "../components/Battlefield";
 import Reserve from "../components/Reserve";
 import VPRedistribute from "../components/VPRedistribute";
-import TurnOrder from "../components/TurnOrder";  // ← import TurnOrder
 
 interface AllianceInfo {
   name: string;
@@ -21,32 +20,49 @@ interface AllianceInfo {
   vp_distribution: number[];
 }
 
+interface BattlefieldMonster {
+  id: number;
+  position: number;
+  name: string;
+  health: number;
+  max_health: number;
+  loot: string | null;
+}
+
+interface ReserveMonster {
+  id: number;
+  position: number;
+  name: string;
+  health: number;
+  loot: string | null;
+}
+
 interface RawFullStatus {
-  battlefield: any[];
-  reserve: any[];
+  battlefield: BattlefieldMonster[];
+  reserve: ReserveMonster[];
   turn_order: string[];
   round_started: boolean;
   alliances: AllianceInfo[];
   submitted_moves: string[];
-  kill_history: string[];
+  kill_history: { player: string | null; monster_id: number }[];
 }
 
 export default function GM() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [numPlayers, setNumPlayers] = useState(4);
-  const [numAlliances, setNumAlliances] = useState(2);
+  const [numPlayers, setNumPlayers] = useState<number>(4);
+  const [numAlliances, setNumAlliances] = useState<number>(2);
   const [assignment, setAssignment] = useState<number[]>([]);
-  const [err1, setErr1] = useState("");
-  const [err2, setErr2] = useState("");
+  const [err1, setErr1] = useState<string>("");
+  const [err2, setErr2] = useState<string>("");
 
   const [status, setStatus] = useState<RawFullStatus | null>(null);
-  const [over, setOver] = useState(false);
-  const [winner, setWinner] = useState("");
-  const [roundResolved, setRoundResolved] = useState(false);
+  const [over, setOver] = useState<boolean>(false);
+  const [winner, setWinner] = useState<string>("");
+  const [roundResolved, setRoundResolved] = useState<boolean>(false);
   const [doneAlliances, setDoneAlliances] = useState<Set<string>>(new Set());
   const [kills, setKills] = useState<string[]>([]);
 
-  // On mount: only jump to step3 if status() truly succeeds
+  // On mount: if a game is in progress, go to step 3
   useEffect(() => {
     (async () => {
       try {
@@ -54,12 +70,12 @@ export default function GM() {
         setStatus(s);
         setStep(3);
       } catch {
-        // stay at step 1
+        // no game yet
       }
     })();
   }, []);
 
-  // Poll status
+  // Poll status every 2s
   useEffect(() => {
     if (step !== 3) return;
     const iv = setInterval(async () => {
@@ -85,8 +101,8 @@ export default function GM() {
     return () => clearInterval(iv);
   }, [step, over, status]);
 
-  // Reset everything
-  async function onReset() {
+  // Reset game
+  async function onReset(): Promise<void> {
     await resetGame();
     setStep(1);
     setStatus(null);
@@ -94,57 +110,74 @@ export default function GM() {
     setWinner("");
     setRoundResolved(false);
     setDoneAlliances(new Set());
+    setKills([]);
   }
 
-  // Step1 → Step2
-  function next1(e: React.FormEvent) {
+  // Step 1 → Step 2
+  function next1(e: React.FormEvent<HTMLFormElement>): void {
     e.preventDefault();
     setErr1("");
-    if (numPlayers < 2) return setErr1("Need ≥2 players.");
-    if (numAlliances < 1 || numAlliances > numPlayers)
-      return setErr1("Alliances 1–players.");
+    if (numPlayers < 2) {
+      setErr1("Need ≥2 players.");
+      return;
+    }
+    if (numAlliances < 1 || numAlliances > numPlayers) {
+      setErr1("Alliances must be between 1 and number of players.");
+      return;
+    }
     setAssignment(Array(numPlayers).fill(0));
     setStep(2);
   }
 
-  // Step2 → startGame
-  async function next2(e: React.FormEvent) {
+  // Step 2 → startGame
+  async function next2(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     setErr2("");
-    const counts = Array(numAlliances).fill(0);
-    assignment.forEach((a) => counts[a]++);
-    const empty = counts.findIndex((c) => c === 0);
-    if (empty !== -1) return setErr2(`Alliance #${empty + 1} empty.`);
-    const names = Array.from({ length: numPlayers }, (_, i) => `P${i + 1}`);
-    const lists: string[][] = Array.from({ length: numAlliances }, () => []);
-    names.forEach((n, i) => lists[assignment[i]].push(n));
-    await startGame(names, lists);
+    const counts: number[] = Array(numAlliances).fill(0);
+    assignment.forEach((a: number) => (counts[a] += 1));
+    const empty = counts.findIndex((c: number) => c === 0);
+    if (empty !== -1) {
+      setErr2(`Alliance #${empty + 1} empty.`);
+      return;
+    }
+    const playerNames: string[] = Array.from({ length: numPlayers }, (_, i: number) => `P${i + 1}`);
+    const alliances: string[][] = Array.from({ length: numAlliances }, () => []);
+    playerNames.forEach((name: string, idx: number) => {
+      alliances[assignment[idx]].push(name);
+    });
+
+    await startGame(playerNames, alliances);
     setStep(3);
     const s = await getStatus();
     setStatus(s);
   }
 
-  // VP redistribute
-  async function onDist(a: AllianceInfo, vps: number[]) {
-    await redistributeVP(a.name, vps);
+  // VP redistribution
+  async function onDist(alliance: AllianceInfo, vps: number[]): Promise<void> {
+    await redistributeVP(alliance.name, vps);
     const s = await getStatus();
     setStatus(s);
   }
-  function doneDist(name: string) {
-    setDoneAlliances((prev) => new Set(prev).add(name));
+  function doneDist(name: string): void {
+    setDoneAlliances((prev: Set<string>) => new Set(prev).add(name));
   }
 
   // Round handlers
-  async function beginRound() {
+  async function beginRound(): Promise<void> {
     await startRound();
     const s = await getStatus();
     setStatus(s);
     setRoundResolved(false);
     setKills([]);
   }
-  async function finishRound() {
+  async function finishRound(): Promise<void> {
     const res = await resolveRound();
-    setKills(res.kill_announcements);
+    const texts: string[] = res.kill_announcements.map((e: { player: string|null; slug: string }) =>
+      e.player
+        ? `${e.player} killed ${e.slug}`
+        : `${e.slug} died from poison`
+    );
+    setKills(texts);
     setRoundResolved(true);
     const go = await gameOver();
     if (go.over) {
@@ -159,7 +192,10 @@ export default function GM() {
   if (step === 1) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <form onSubmit={next1} className="bg-black bg-opacity-50 p-6 rounded text-white">
+        <form
+          onSubmit={next1}
+          className="bg-black bg-opacity-50 p-6 rounded text-white"
+        >
           <h2 className="mb-4 text-xl font-bold">Setup (1/2)</h2>
           <label className="block mb-2">
             Players:
@@ -167,7 +203,9 @@ export default function GM() {
               type="number"
               min={2}
               value={numPlayers}
-              onChange={(e) => setNumPlayers(+e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setNumPlayers(Number(e.target.value))
+              }
               className="ml-2 w-16 text-black"
             />
           </label>
@@ -178,12 +216,17 @@ export default function GM() {
               min={1}
               max={numPlayers}
               value={numAlliances}
-              onChange={(e) => setNumAlliances(+e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setNumAlliances(Number(e.target.value))
+              }
               className="ml-2 w-16 text-black"
             />
           </label>
           {err1 && <p className="text-red-400">{err1}</p>}
-          <button type="submit" className="mt-4 px-4 py-2 bg-blue-600 rounded">
+          <button
+            type="submit"
+            className="mt-4 px-4 py-2 bg-blue-600 rounded"
+          >
             Next
           </button>
         </form>
@@ -193,10 +236,16 @@ export default function GM() {
 
   // Step 2
   if (step === 2) {
-    const names = Array.from({ length: numAlliances }, (_, i) => `Alliance ${i + 1}`);
+    const allianceNames: string[] = Array.from(
+      { length: numAlliances },
+      (_, i: number) => `Alliance ${i + 1}`
+    );
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <form onSubmit={next2} className="bg-black bg-opacity-50 p-6 rounded text-white">
+        <form
+          onSubmit={next2}
+          className="bg-black bg-opacity-50 p-6 rounded text-white"
+        >
           <h2 className="mb-4 text-xl font-bold">Setup (2/2)</h2>
           <table className="w-full mb-4 bg-gray-800 bg-opacity-60 rounded">
             <thead>
@@ -206,22 +255,22 @@ export default function GM() {
               </tr>
             </thead>
             <tbody>
-              {assignment.map((a, i) => (
+              {assignment.map((a: number, i: number) => (
                 <tr key={i}>
                   <td className="border px-2 py-1">P{i + 1}</td>
                   <td className="border px-2 py-1">
                     <select
                       value={a}
-                      onChange={(e) => {
-                        const arr = [...assignment];
-                        arr[i] = +e.target.value;
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                        const arr: number[] = [...assignment];
+                        arr[i] = Number(e.target.value);
                         setAssignment(arr);
                       }}
                       className="w-full text-black"
                     >
-                      {names.map((n, idx) => (
+                      {allianceNames.map((name: string, idx: number) => (
                         <option key={idx} value={idx}>
-                          {n}
+                          {name}
                         </option>
                       ))}
                     </select>
@@ -231,7 +280,10 @@ export default function GM() {
             </tbody>
           </table>
           {err2 && <p className="text-red-400">{err2}</p>}
-          <button type="submit" className="px-4 py-2 bg-green-600 rounded">
+          <button
+            type="submit"
+            className="px-4 py-2 bg-green-600 rounded"
+          >
             Start Game
           </button>
         </form>
@@ -239,7 +291,7 @@ export default function GM() {
     );
   }
 
-  // Step 3: status guaranteed non-null now
+  // Step 3: GM console
   if (step === 3 && status) {
     // Game Over
     if (status.round_started && over) {
@@ -259,24 +311,28 @@ export default function GM() {
       );
     }
 
-    // Before first round: redistribute
+    // Redistribute
     if (!status.round_started && !roundResolved) {
-      const allDone = status.alliances.every((a) => doneAlliances.has(a.name));
+      const allDone: boolean = status.alliances.every((a: AllianceInfo) =>
+        doneAlliances.has(a.name)
+      );
       return (
         <div className="p-4 text-white">
           <h2 className="text-xl font-bold mb-4">Redistribute VP</h2>
-          {status.alliances.map((a) => (
+          {status.alliances.map((a: AllianceInfo) => (
             <VPRedistribute
               key={a.name}
               alliance={a}
-              onRedistribute={(v) => onDist(a, v)}
+              onRedistribute={(v: number[]) => onDist(a, v)}
               onComplete={() => doneDist(a.name)}
             />
           ))}
           <button
             disabled={!allDone}
             onClick={beginRound}
-            className={`px-4 py-2 rounded ${allDone ? "bg-blue-600" : "bg-gray-400"}`}
+            className={`px-4 py-2 rounded ${
+              allDone ? "bg-blue-600" : "bg-gray-400"
+            }`}
           >
             Start Round
           </button>
@@ -290,30 +346,33 @@ export default function GM() {
       );
     }
 
-    // Round in progress
+    // Round In Progress
     if (status.round_started && !roundResolved) {
-      const total = status.alliances.reduce((s, a) => s + a.members.length, 0);
-      const done = status.submitted_moves.length === total;
-      const free = status.reserve.filter(
-        (r) => !status.battlefield.find((b) => b.position === r.position)
+      const totalPlayers: number = status.alliances.reduce(
+        (sum: number, a: AllianceInfo) => sum + a.members.length,
+        0
       );
+      const done: boolean = status.submitted_moves.length === totalPlayers;
       return (
         <div className="p-4 text-white">
           <h2 className="text-xl font-bold mb-4">Round In Progress</h2>
-          <TurnOrder order={status.turn_order} /> {/* ← show turn order */}
           <Battlefield monsters={status.battlefield} />
-          <Reserve monsters={free} />
-          <p>Submitted: {status.submitted_moves.length}/{total}</p>
+          <Reserve monsters={status.reserve} />
+          <p className="mt-2">
+            Submitted: {status.submitted_moves.length}/{totalPlayers}
+          </p>
           <button
             disabled={!done}
             onClick={finishRound}
-            className={`px-4 py-2 rounded ${done ? "bg-red-600" : "bg-gray-400"}`}
+            className={`mt-2 px-4 py-2 rounded ${
+              done ? "bg-red-600" : "bg-gray-400"
+            }`}
           >
             Resolve Round
           </button>
           <button
             onClick={onReset}
-            className="ml-4 px-3 py-1 bg-yellow-600 rounded"
+            className="ml-4 mt-2 px-3 py-1 bg-yellow-600 rounded"
           >
             Reset
           </button>
@@ -321,33 +380,33 @@ export default function GM() {
       );
     }
 
-    // Round complete: show kills + next round
+    // Round Complete
     if (roundResolved) {
-      const allDone = status.alliances.every((a) => doneAlliances.has(a.name));
-      const free = status.reserve.filter(
-        (r) => !status.battlefield.find((b) => b.position === r.position)
+      const allDone: boolean = status.alliances.every((a: AllianceInfo) =>
+        doneAlliances.has(a.name)
       );
       return (
         <div className="p-4 text-white">
           <h2 className="text-xl font-bold mb-2">This Round’s Kills</h2>
           <ul className="list-disc list-inside mb-4">
-            {kills.map((k, i) => (
+            {kills.map((k: string, i: number) => (
               <li key={i}>{k}</li>
             ))}
           </ul>
-          <TurnOrder order={status.turn_order} /> {/* ← optionally show order again */}
           <Battlefield monsters={status.battlefield} />
-          <Reserve monsters={free} />
+          <Reserve monsters={status.reserve} />
           <button
             disabled={!allDone}
             onClick={beginRound}
-            className={`px-4 py-2 rounded ${allDone ? "bg-blue-600" : "bg-gray-400"}`}
+            className={`mt-2 px-4 py-2 rounded ${
+              allDone ? "bg-blue-600" : "bg-gray-400"
+            }`}
           >
             Next Round
           </button>
           <button
             onClick={onReset}
-            className="ml-4 px-3 py-1 bg-yellow-600 rounded"
+            className="ml-4 mt-2 px-3 py-1 bg-yellow-600 rounded"
           >
             Reset
           </button>
@@ -356,6 +415,5 @@ export default function GM() {
     }
   }
 
-  // fallback
   return null;
 }

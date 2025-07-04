@@ -11,7 +11,7 @@ import Battlefield from "../components/Battlefield";
 
 interface BattlefieldMonster {
   position: number;
-  name: string;         // slug
+  name: string;       // slug
   health: number;
   max_health: number;
   loot: string | null;
@@ -28,25 +28,28 @@ export default function Player() {
   const { playerName } = useParams<{ playerName: string }>();
   const [status, setStatus] = useState<StatusShape | null>(null);
   const [weapons, setWeapons] = useState<[string, number][]>([]);
-  const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [isMyTurn, setIsMyTurn] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState<boolean>(false);
+  const [isMyTurn, setIsMyTurn] = useState<boolean>(false);
 
-  const [selectedWeaponIdx, setSelectedWeaponIdx] = useState(0);
+  // selected weapon index
+  const [selectedWeaponIdx, setSelectedWeaponIdx] = useState<number>(0);
+  // selected target position
   const [targetPos, setTargetPos] = useState<number>(1);
 
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
+        // fetch full status
         const s: StatusShape = await getStatus();
         setStatus(s);
 
-        try {
-          const w = await getPlayerWeapons(playerName!);
+        // fetch my weapons
+        if (playerName) {
+          const w = await getPlayerWeapons(playerName);
           setWeapons(w);
-        } catch {
-          console.error("Failed to fetch weapons for", playerName);
         }
 
+        // determine submission / turn state
         if (!s.round_started) {
           setHasSubmitted(false);
           setIsMyTurn(false);
@@ -59,11 +62,12 @@ export default function Player() {
         const nextPlayer = s.turn_order.find(
           (n) => !s.submitted_moves.includes(n)
         );
-        setIsMyTurn(nextPlayer === playerName!);
+        setIsMyTurn(nextPlayer === playerName);
       } catch {
         // ignore
       }
     }, 500);
+
     return () => clearInterval(interval);
   }, [playerName]);
 
@@ -97,6 +101,7 @@ export default function Player() {
     );
   }
 
+  // Your turn UI
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-2xl font-semibold">Your Turn, {playerName}</h2>
@@ -107,37 +112,48 @@ export default function Player() {
 
         {weapons.length === 0 && <p>Loading your weapons…</p>}
 
+        {/* Weapon radios */}
         {weapons.length === 1 ? (
           <p>
             Only weapon: <strong>{weapons[0][0]}</strong> (ATK={weapons[0][1]})
           </p>
         ) : (
           <ul className="space-y-1">
-            {weapons.map(([wname, atk], idx) => (
-              <li key={idx}>
-                <label>
-                  <input
-                    type="radio"
-                    name="weaponRadio"
-                    value={idx}
-                    checked={idx === selectedWeaponIdx}
-                    onChange={() => setSelectedWeaponIdx(idx)}
-                  />{" "}
-                  {wname} (ATK={atk})
-                </label>
-              </li>
-            ))}
+            {weapons.map((wp: [string, number], idx: number) => {
+              const [wname, atk] = wp;
+              return (
+                <li key={idx}>
+                  <label>
+                    <input
+                      type="radio"
+                      name="weaponRadio"
+                      value={idx}
+                      checked={idx === selectedWeaponIdx}
+                      onChange={(
+                        e: React.ChangeEvent<HTMLInputElement>
+                      ) =>
+                        setSelectedWeaponIdx(Number(e.target.value))
+                      }
+                    />{" "}
+                    {wname} (ATK={atk})
+                  </label>
+                </li>
+              );
+            })}
           </ul>
         )}
 
+        {/* Monster select */}
         <div>
           <label className="mr-2">Monster position:</label>
           <select
             className="border px-2 py-1"
             value={targetPos}
-            onChange={(e) => setTargetPos(Number(e.target.value))}
+            onChange={(
+              e: React.ChangeEvent<HTMLSelectElement>
+            ) => setTargetPos(Number(e.target.value))}
           >
-            {battlefield.map((m) => (
+            {battlefield.map((m: BattlefieldMonster) => (
               <option key={m.position} value={m.position}>
                 {m.position}
               </option>
@@ -145,11 +161,16 @@ export default function Player() {
           </select>
         </div>
 
+        {/* Submit button */}
         <button
           className="mt-2 px-4 py-2 bg-green-600 text-white rounded"
-          onClick={async () => {
+          onClick={async (): Promise<void> => {
             const chosenWeaponName = weapons[selectedWeaponIdx][0];
-            await submitMove(playerName!, targetPos, chosenWeaponName);
+            await submitMove(
+              playerName!,
+              targetPos,
+              chosenWeaponName
+            );
             setHasSubmitted(true);
           }}
         >
